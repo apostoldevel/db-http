@@ -223,12 +223,12 @@ BEGIN
       END IF;
     END LOOP;
 
-    PERFORM FROM pg_namespace n JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = 'tg' AND p.proname = lower(b.username);
+    PERFORM FROM pg_namespace n JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = 'bot' AND p.proname = lower(b.username);
 
     IF FOUND THEN
-      EXECUTE format('SELECT tg.%s($1, $2);', b.username) USING uBotId, body;
+      EXECUTE format('SELECT bot.%s($1, $2);', b.username) USING uBotId, body;
     ELSE
-      PERFORM tg.webhook(uBotId, body);
+      PERFORM bot.webhook(uBotId, body);
     END IF;
 
     RETURN NEXT json_build_object('code', 200, 'message', 'OK');
