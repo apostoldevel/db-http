@@ -208,7 +208,7 @@ BEGIN
 
     uBotId := coalesce(split_part(path, '/', 5)::uuid, '00000000-0000-4000-8000-000000000001'::uuid);
 
-    SELECT username, secret INTO b FROM tg.bot WHERE id = uBotId;
+    SELECT username, secret INTO b FROM bot.list WHERE id = uBotId;
 
     IF NOT FOUND THEN
       RETURN NEXT json_build_object('error', json_build_object('code', 404, 'message', format('Bot by id "%s" not found.', uBotId)));
