@@ -184,6 +184,7 @@ DECLARE
 
   cBegin    timestamptz;
 
+  vName     text;
   vMessage  text;
   vContext  text;
 BEGIN
@@ -223,13 +224,7 @@ BEGIN
       END IF;
     END LOOP;
 
-    PERFORM FROM pg_namespace n JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = 'bot' AND p.proname = lower(b.username);
-
-    IF FOUND THEN
-      EXECUTE format('SELECT bot.%s($1, $2);', b.username) USING uBotId, body;
-    ELSE
-      PERFORM bot.webhook(uBotId, body);
-    END IF;
+    PERFORM bot.webhook(uBotId, body);
 
     RETURN NEXT json_build_object('code', 200, 'message', 'OK');
 
