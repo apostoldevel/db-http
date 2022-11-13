@@ -35,14 +35,18 @@ CREATE OR REPLACE FUNCTION http.create_request (
   pHeaders      jsonb DEFAULT null,
   pContent      text DEFAULT null,
   pDone         text DEFAULT null,
-  pFail         text DEFAULT null
+  pFail         text DEFAULT null,
+  pAgent        text DEFAULT null,
+  pProfile      text DEFAULT null,
+  pCommand      text DEFAULT null,
+  pMessage      text DEFAULT null
 ) RETURNS       uuid
 AS $$
 DECLARE
   uId           uuid;
 BEGIN
-  INSERT INTO http.request (state, method, resource, headers, content, done, fail)
-  VALUES (1, pMethod, pResource, pHeaders, pContent, pDone, pFail)
+  INSERT INTO http.request (state, method, resource, headers, content, done, fail, agent, profile, command, message)
+  VALUES (1, pMethod, pResource, pHeaders, pContent, pDone, pFail, pAgent, pProfile, pCommand, pMessage)
   RETURNING id INTO uId;
 
   RETURN uId;
@@ -73,7 +77,7 @@ BEGIN
   VALUES (pRequest, pRequest, pStatus, pStatusText, pHeaders, pContent, age(clock_timestamp(), cBegin))
   RETURNING id INTO uId;
 
-  UPDATE http.request SET state = 2 WHERE id = pRequest;
+  PERFORM http.done(pRequest);
 
   RETURN uId;
 END;
@@ -184,7 +188,6 @@ DECLARE
 
   cBegin    timestamptz;
 
-  vName     text;
   vMessage  text;
   vContext  text;
 BEGIN
@@ -262,35 +265,41 @@ $$ LANGUAGE plpgsql
  * @param {text} content - Содержание запроса
  * @param {text} done - Имя функции обратного вызова в случае успешного ответа
  * @param {text} fail - Имя функции обратного вызова в случае сбоя
+ * @param {text} agent - Агент
+ * @param {text} profile - Профиль
+ * @param {text} command - Команда
+ * @param {text} message - Сообщение
  * @return {uuid}
  */
 CREATE OR REPLACE FUNCTION http.fetch (
-  resource  text,
-  method    text DEFAULT 'GET',
-  headers   jsonb DEFAULT null,
-  content   text DEFAULT null,
-  done      text DEFAULT null,
-  fail      text DEFAULT null
-) RETURNS   uuid
+  resource      text,
+  method        text DEFAULT 'GET',
+  headers       jsonb DEFAULT null,
+  content       text DEFAULT null,
+  done          text DEFAULT null,
+  fail          text DEFAULT null,
+  agent         text DEFAULT null,
+  profile       text DEFAULT null,
+  command       text DEFAULT null,
+  message       text DEFAULT null
+) RETURNS       uuid
 AS $$
 BEGIN
   IF done IS NOT NULL THEN
-    PERFORM FROM pg_namespace n JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(done, '.', 1) AND p.proname = split_part(done, '.', 2);
-
+    PERFORM FROM pg_namespace n INNER JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(done, '.', 1) AND p.proname = split_part(done, '.', 2);
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Not found function: %', done;
+	  RAISE EXCEPTION 'Not found function: %', done;
     END IF;
   END IF;
 
   IF fail IS NOT NULL THEN
-    PERFORM FROM pg_namespace n JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(fail, '.', 1) AND p.proname = split_part(fail, '.', 2);
-
+    PERFORM FROM pg_namespace n INNER JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(fail, '.', 1) AND p.proname = split_part(fail, '.', 2);
     IF NOT FOUND THEN
-      RAISE EXCEPTION 'Not found function: %', fail;
+	  RAISE EXCEPTION 'Not found function: %', fail;
     END IF;
   END IF;
 
-  RETURN http.create_request(resource, method, headers, content, done, fail);
+  RETURN http.create_request(resource, method, headers, content, done, fail, agent, profile, command, message);
 END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
@@ -304,14 +313,8 @@ CREATE OR REPLACE FUNCTION http.done (
   pRequest  uuid
 ) RETURNS   void
 AS $$
-DECLARE
-  r         record;
 BEGIN
-  SELECT q.method, q.resource, a.status, a.status_text, a.content INTO r
-    FROM http.request q INNER JOIN http.response a ON q.id = a.request
-   WHERE q.id = pRequest;
-
-  RAISE NOTICE '% % % %', r.method, r.resource, r.status, r.status_text;
+  UPDATE http.request SET state = 2 WHERE id = pRequest;
 END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
@@ -322,17 +325,12 @@ $$ LANGUAGE plpgsql
 --------------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION http.fail (
-  pRequest  uuid
+  pRequest  uuid,
+  pError    text
 ) RETURNS   void
 AS $$
-DECLARE
-  r         record;
 BEGIN
-  SELECT method, resource, error INTO r
-    FROM http.request
-   WHERE id = pRequest;
-
-  RAISE NOTICE 'ERROR: % % %', r.method, r.resource, r.error;
+  UPDATE http.request SET state = 3, error = pError WHERE id = pRequest;
 END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
