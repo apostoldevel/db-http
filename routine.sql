@@ -335,3 +335,77 @@ END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = http, pg_temp;
+
+--------------------------------------------------------------------------------
+-- FUNCTION dec_to_hex ---------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION dec_to_hex (
+  D          numeric,
+  L          int default null
+) RETURNS    text
+AS
+$$
+DECLARE
+  H          text;
+  M          numeric;
+  R          numeric;
+BEGIN
+  R := D;
+
+  WHILE R > 0
+  LOOP
+    M := mod(R, 16);
+    H := concat(
+		   CASE
+			 WHEN M < 10
+			 THEN chr(CAST(M + 48 AS INTEGER))
+			 ELSE chr(CAST(M + 87 AS INTEGER))
+		   END, H);
+    R := div(R, 16);
+  END LOOP;
+
+  IF H IS NULL THEN
+    H := '0';
+  END IF;
+
+  IF L IS NOT NULL AND length(H) < L THEN
+    RETURN lpad(H, L, '0');
+  END IF;
+
+  RETURN H;
+END
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+GRANT EXECUTE ON FUNCTION dec_to_hex(numeric, int) TO PUBLIC;
+
+--------------------------------------------------------------------------------
+-- URLEncode -------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION URLEncode (
+  url       text
+) RETURNS   text
+AS $$
+DECLARE
+  result    text;
+  c         text;
+  i         int;
+BEGIN
+  result := '';
+
+  FOR i IN 1..length(url)
+  LOOP
+    c := substr(url, i, 1);
+    IF regexp_match(c, '[A-Za-z0-9_~.-]') IS NOT NULL THEN
+      result := result || c;
+    ELSE
+      result := concat(result, '%', dec_to_hex(ascii(c), 2));
+    END IF;
+  END LOOP;
+
+  RETURN result;
+END
+$$ LANGUAGE plpgsql IMMUTABLE;
+
+GRANT EXECUTE ON FUNCTION URLEncode(text) TO PUBLIC;
