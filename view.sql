@@ -7,4 +7,4 @@ AS
          t1.message, t1.error
     FROM http.request t1 LEFT JOIN http.response t2 ON t1.id = t2.request;
 
-GRANT ALL ON http.fetch TO administrator;
+GRANT ALL ON http.fetch TO public;
