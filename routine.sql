@@ -306,6 +306,47 @@ $$ LANGUAGE plpgsql
   SET search_path = http, pg_temp;
 
 --------------------------------------------------------------------------------
+-- HTTP FETCH JSON -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Выполняет HTTP запрос.
+ * @param {text} resource - Ресурс
+ * @param {text} method - Метод
+ * @param {jsonb} headers - HTTP заголовки
+ * @param {json} content - Содержание запроса в формате JSON
+ * @param {text} done - Имя функции обратного вызова в случае успешного ответа
+ * @param {text} fail - Имя функции обратного вызова в случае сбоя
+ * @param {text} agent - Агент
+ * @param {text} profile - Профиль
+ * @param {text} command - Команда
+ * @param {text} message - Сообщение
+ * @return {uuid}
+ */
+CREATE OR REPLACE FUNCTION http.fetch (
+  resource      text,
+  method        text DEFAULT 'POST',
+  headers       jsonb DEFAULT null,
+  content       jsonb DEFAULT null,
+  done          text DEFAULT null,
+  fail          text DEFAULT null,
+  agent         text DEFAULT null,
+  profile       text DEFAULT null,
+  command       text DEFAULT null,
+  message       text DEFAULT null
+) RETURNS       uuid
+AS $$
+BEGIN
+  IF headers IS NULL THEN
+    headers := jsonb_build_object('Content-Type', 'application/json');
+  END IF;
+
+  RETURN http.create_request(resource, method, headers, content::text, done, fail, agent, profile, command, message);
+END;
+$$ LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = http, pg_temp;
+
+--------------------------------------------------------------------------------
 -- http.done -------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
