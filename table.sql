@@ -52,7 +52,8 @@ CREATE TABLE http.request (
   profile       text,
   command       text,
   message       text,
-  error         text
+  error         text,
+  data          jsonb
 );
 
 COMMENT ON TABLE http.request IS 'HTTP запрос.';
@@ -72,6 +73,7 @@ COMMENT ON COLUMN http.request.profile IS 'Профиль настроек аг�
 COMMENT ON COLUMN http.request.command IS 'Команда (при наличии)';
 COMMENT ON COLUMN http.request.message IS 'Сообщение (при наличии)';
 COMMENT ON COLUMN http.request.error IS 'Текст описания ошибки (при наличии)';
+COMMENT ON COLUMN http.request.data IS 'Произвольные данные в формате JSON';
 
 CREATE INDEX ON http.request (state);
 CREATE INDEX ON http.request (method);
