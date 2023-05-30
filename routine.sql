@@ -150,7 +150,22 @@ BEGIN
 
   WHEN 'webhook' THEN
 
-    RETURN NEXT json_build_object('code', 200, 'message', 'OK');
+    RETURN NEXT http.webhook('GET', path, headers, params);
+
+  WHEN 'headers' THEN
+
+	RETURN NEXT coalesce(headers, jsonb_build_object());
+
+  WHEN 'params' THEN
+
+	RETURN NEXT coalesce(params, jsonb_build_object());
+
+  WHEN 'log' THEN
+
+	FOR r IN SELECT * FROM http.log ORDER BY id DESC
+    LOOP
+	  RETURN NEXT row_to_json(r);
+    END LOOP;
 
   ELSE
 
@@ -194,11 +209,6 @@ CREATE OR REPLACE FUNCTION http.post (
 ) RETURNS   SETOF json
 AS $$
 DECLARE
-  r         record;
-  b         record;
-
-  uBotId    uuid;
-
   nId       bigint;
 
   cBegin    timestamptz;
@@ -223,28 +233,21 @@ BEGIN
 
     RETURN NEXT json_build_object('serverTime', trunc(extract(EPOCH FROM Now())));
 
+  WHEN 'headers' THEN
+
+	RETURN NEXT coalesce(headers, jsonb_build_object());
+
+  WHEN 'params' THEN
+
+	RETURN NEXT coalesce(params, jsonb_build_object());
+
+  WHEN 'body' THEN
+
+	RETURN NEXT coalesce(body, jsonb_build_object());
+
   WHEN 'webhook' THEN
 
-    uBotId := coalesce(split_part(path, '/', 5)::uuid, '00000000-0000-4000-8000-000000000001'::uuid);
-
-    SELECT username, secret INTO b FROM bot.list WHERE id = uBotId;
-
-    IF NOT FOUND THEN
-      RETURN NEXT json_build_object('error', json_build_object('code', 404, 'message', format('Bot by id "%s" not found.', uBotId)));
-      RETURN;
-    END IF;
-
-    FOR r IN SELECT * FROM jsonb_each_text(headers)
-    LOOP
-      IF r.key = 'X-Telegram-Bot-Api-Secret-Token' AND r.value IS DISTINCT FROM b.secret THEN
-        RETURN NEXT json_build_object('error', json_build_object('code', 401, 'message', 'Unauthorized'));
-        RETURN;
-      END IF;
-    END LOOP;
-
-    PERFORM bot.webhook(uBotId, body);
-
-    RETURN NEXT json_build_object('code', 200, 'message', 'OK');
+    RETURN NEXT http.webhook('POST', path, headers, params, body);
 
   ELSE
 
@@ -265,6 +268,25 @@ WHEN others THEN
 
   RETURN;
 END
+$$ LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = http, pg_temp;
+
+--------------------------------------------------------------------------------
+-- http.webhook ----------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION http.webhook (
+  method    text,
+  path      text,
+  headers   jsonb,
+  params    jsonb DEFAULT null,
+  body      jsonb DEFAULT null
+) RETURNS   json
+AS $$
+BEGIN
+  RETURN json_build_object('code', 200, 'message', 'OK');
+END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = http, pg_temp;
