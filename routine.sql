@@ -154,30 +154,30 @@ BEGIN
 
   WHEN 'headers' THEN
 
-	RETURN NEXT coalesce(headers, jsonb_build_object());
+    RETURN NEXT coalesce(headers, jsonb_build_object());
 
   WHEN 'params' THEN
 
-	RETURN NEXT coalesce(params, jsonb_build_object());
+    RETURN NEXT coalesce(params, jsonb_build_object());
 
   WHEN 'latest' THEN
 
     FOR r IN SELECT * FROM jsonb_to_record(params) AS x(base text, symbols text)
     LOOP
       IF r.base = 'USD' THEN
-	    RETURN NEXT jsonb_build_object('success', true, 'timestamp', trunc(extract(EPOCH FROM Now())), 'base', r.base, 'date', to_char(Now(), 'YYYY-MM-DD'), 'rates', jsonb_build_object('RUB', 96.245026, 'EUR', 0.946739, 'BTC', 0.000038));
+        RETURN NEXT jsonb_build_object('success', true, 'timestamp', trunc(extract(EPOCH FROM Now())), 'base', r.base, 'date', to_char(Now(), 'YYYY-MM-DD'), 'rates', jsonb_build_object('RUB', 96.245026, 'EUR', 0.946739, 'BTC', 0.000038));
       ELSIF r.base = 'BTC' THEN
-	    RETURN NEXT jsonb_build_object('success', true, 'timestamp', trunc(extract(EPOCH FROM Now())), 'base', r.base, 'date', to_char(Now(), 'YYYY-MM-DD'), 'rates', jsonb_build_object('RUB', 2542803.2, 'EUR', 25012.95, 'USD', 26420.1));
-	  ELSE
-	    RETURN NEXT jsonb_build_object('success', false, jsonb_build_object('code', 400, 'message', format('Base "%s" not supported.', r.base)));
-	  END IF;
+        RETURN NEXT jsonb_build_object('success', true, 'timestamp', trunc(extract(EPOCH FROM Now())), 'base', r.base, 'date', to_char(Now(), 'YYYY-MM-DD'), 'rates', jsonb_build_object('RUB', 2542803.2, 'EUR', 25012.95, 'USD', 26420.1));
+      ELSE
+        RETURN NEXT jsonb_build_object('success', false, jsonb_build_object('code', 400, 'message', format('Base "%s" not supported.', r.base)));
+      END IF;
     END LOOP;
 
   WHEN 'log' THEN
 
-	FOR r IN SELECT * FROM http.log ORDER BY id DESC
+    FOR r IN SELECT * FROM http.log ORDER BY id DESC
     LOOP
-	  RETURN NEXT row_to_json(r);
+      RETURN NEXT row_to_json(r);
     END LOOP;
 
   ELSE
@@ -248,15 +248,15 @@ BEGIN
 
   WHEN 'headers' THEN
 
-	RETURN NEXT coalesce(headers, jsonb_build_object());
+    RETURN NEXT coalesce(headers, jsonb_build_object());
 
   WHEN 'params' THEN
 
-	RETURN NEXT coalesce(params, jsonb_build_object());
+    RETURN NEXT coalesce(params, jsonb_build_object());
 
   WHEN 'body' THEN
 
-	RETURN NEXT coalesce(body, jsonb_build_object());
+    RETURN NEXT coalesce(body, jsonb_build_object());
 
   WHEN 'webhook' THEN
 
@@ -342,14 +342,14 @@ BEGIN
   IF done IS NOT NULL THEN
     PERFORM FROM pg_namespace n INNER JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(done, '.', 1) AND p.proname = split_part(done, '.', 2);
     IF NOT FOUND THEN
-	  RAISE EXCEPTION 'Not found function: %', done;
+      RAISE EXCEPTION 'Not found function: %', done;
     END IF;
   END IF;
 
   IF fail IS NOT NULL THEN
     PERFORM FROM pg_namespace n INNER JOIN pg_proc p ON n.oid = p.pronamespace WHERE n.nspname = split_part(fail, '.', 1) AND p.proname = split_part(fail, '.', 2);
     IF NOT FOUND THEN
-	  RAISE EXCEPTION 'Not found function: %', fail;
+      RAISE EXCEPTION 'Not found function: %', fail;
     END IF;
   END IF;
 
@@ -456,11 +456,11 @@ BEGIN
   LOOP
     M := mod(R, 16);
     H := concat(
-		   CASE
-			 WHEN M < 10
-			 THEN chr(CAST(M + 48 AS INTEGER))
-			 ELSE chr(CAST(M + 87 AS INTEGER))
-		   END, H);
+    CASE
+      WHEN M < 10
+      THEN chr(CAST(M + 48 AS INTEGER))
+      ELSE chr(CAST(M + 87 AS INTEGER))
+    END, H);
     R := div(R, 16);
   END LOOP;
 
