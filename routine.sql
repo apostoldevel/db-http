@@ -34,7 +34,7 @@ CREATE OR REPLACE FUNCTION http.create_request (
   pType         text DEFAULT null,
   pMethod       text DEFAULT 'GET',
   pHeaders      jsonb DEFAULT null,
-  pContent      text DEFAULT null,
+  pContent      bytea DEFAULT null,
   pDone         text DEFAULT null,
   pFail         text DEFAULT null,
   pAgent        text DEFAULT null,
@@ -66,7 +66,7 @@ CREATE OR REPLACE FUNCTION http.create_response (
   pStatus       integer,
   pStatusText   text,
   pHeaders      jsonb,
-  pContent      text DEFAULT null
+  pContent      bytea DEFAULT null
 ) RETURNS       uuid
 AS $$
 DECLARE
@@ -195,7 +195,7 @@ WHEN others THEN
 
   PERFORM http.write_to_log(path, headers, params, null, 'GET', vMessage, vContext);
 
-  RETURN NEXT json_build_object('error', json_build_object('code', 500, 'message', vMessage));
+  RETURN NEXT json_build_object('error', json_build_object('code', 400, 'message', vMessage));
 
   RETURN;
 END;
@@ -222,6 +222,8 @@ CREATE OR REPLACE FUNCTION http.post (
 ) RETURNS   SETOF json
 AS $$
 DECLARE
+  r         record;
+
   nId       bigint;
 
   cBegin    timestamptz;
@@ -234,6 +236,11 @@ BEGIN
   IF split_part(path, '/', 3) != 'v1' THEN
     RAISE EXCEPTION 'Invalid API version.';
   END IF;
+
+  FOR r IN SELECT * FROM jsonb_each(headers)
+  LOOP
+    -- parse headers here
+  END LOOP;
 
   cBegin := clock_timestamp();
 
@@ -258,13 +265,9 @@ BEGIN
 
     RETURN NEXT coalesce(body, jsonb_build_object());
 
-  WHEN 'webhook' THEN
-
-    RETURN NEXT http.webhook('POST', path, headers, params, body);
-
   ELSE
 
-    RETURN NEXT json_build_object('error', json_build_object('code', 404, 'message', format('Patch "%s" not found.', path)));
+    RAISE EXCEPTION 'Patch "%" not found.', path;
 
   END CASE;
 
@@ -277,28 +280,9 @@ WHEN others THEN
 
   PERFORM http.write_to_log(path, headers, params, body, 'POST', vMessage, vContext);
 
-  RETURN NEXT json_build_object('error', json_build_object('code', 500, 'message', vMessage));
+  RETURN NEXT json_build_object('error', json_build_object('code', 400, 'message', vMessage));
 
   RETURN;
-END
-$$ LANGUAGE plpgsql
-  SECURITY DEFINER
-  SET search_path = http, pg_temp;
-
---------------------------------------------------------------------------------
--- http.webhook ----------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION http.webhook (
-  method    text,
-  path      text,
-  headers   jsonb,
-  params    jsonb DEFAULT null,
-  body      jsonb DEFAULT null
-) RETURNS   json
-AS $$
-BEGIN
-  RETURN json_build_object('code', 200, 'message', 'OK');
 END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
@@ -312,7 +296,7 @@ $$ LANGUAGE plpgsql
  * @param {text} resource - Ресурс
  * @param {text} method - Метод
  * @param {jsonb} headers - HTTP заголовки
- * @param {text} content - Содержание запроса
+ * @param {bytea} content - Содержимое запроса
  * @param {text} done - Имя функции обратного вызова в случае успешного ответа
  * @param {text} fail - Имя функции обратного вызова в случае сбоя
  * @param {text} agent - Агент
@@ -327,7 +311,7 @@ CREATE OR REPLACE FUNCTION http.fetch (
   resource      text,
   method        text DEFAULT 'GET',
   headers       jsonb DEFAULT null,
-  content       text DEFAULT null,
+  content       bytea DEFAULT null,
   done          text DEFAULT null,
   fail          text DEFAULT null,
   agent         text DEFAULT null,
@@ -367,7 +351,48 @@ $$ LANGUAGE plpgsql
  * @param {text} resource - Ресурс
  * @param {text} method - Метод
  * @param {jsonb} headers - HTTP заголовки
- * @param {json} content - Содержание запроса в формате JSON
+ * @param {text} content - Содержимое запроса в текстовом формате
+ * @param {text} done - Имя функции обратного вызова в случае успешного ответа
+ * @param {text} fail - Имя функции обратного вызова в случае сбоя
+ * @param {text} agent - Агент
+ * @param {text} profile - Профиль
+ * @param {text} command - Команда
+ * @param {text} message - Сообщение
+ * @param {text} type - Способ отправки: native - родной; curl - через библиотеку cURL
+ * @param {text} data - Произвольные данные в формате JSON
+ * @return {uuid}
+ */
+CREATE OR REPLACE FUNCTION http.fetch (
+  resource      text,
+  method        text DEFAULT 'POST',
+  headers       jsonb DEFAULT null,
+  content       text DEFAULT null,
+  done          text DEFAULT null,
+  fail          text DEFAULT null,
+  agent         text DEFAULT null,
+  profile       text DEFAULT null,
+  command       text DEFAULT null,
+  message       text DEFAULT null,
+  type          text DEFAULT null,
+  data          jsonb DEFAULT null
+) RETURNS       uuid
+AS $$
+BEGIN
+  RETURN http.create_request(resource, type, method, headers, convert_to(content, 'utf8'), done, fail, agent, profile, command, message, data);
+END;
+$$ LANGUAGE plpgsql
+  SECURITY DEFINER
+  SET search_path = http, pg_temp;
+
+--------------------------------------------------------------------------------
+-- HTTP FETCH JSON -------------------------------------------------------------
+--------------------------------------------------------------------------------
+/**
+ * Выполняет HTTP запрос.
+ * @param {text} resource - Ресурс
+ * @param {text} method - Метод
+ * @param {jsonb} headers - HTTP заголовки
+ * @param {jsonb} content - Содержимое запроса в формате JSON
  * @param {text} done - Имя функции обратного вызова в случае успешного ответа
  * @param {text} fail - Имя функции обратного вызова в случае сбоя
  * @param {text} agent - Агент
@@ -398,7 +423,7 @@ BEGIN
     headers := jsonb_build_object('Content-Type', 'application/json');
   END IF;
 
-  RETURN http.create_request(resource, type, method, headers, content::text, done, fail, agent, profile, command, message, data);
+  RETURN http.create_request(resource, type, method, headers, convert_to(content::text, 'utf8'), done, fail, agent, profile, command, message, data);
 END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
@@ -434,77 +459,3 @@ END;
 $$ LANGUAGE plpgsql
   SECURITY DEFINER
   SET search_path = http, pg_temp;
-
---------------------------------------------------------------------------------
--- FUNCTION dec_to_hex ---------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION dec_to_hex (
-  D          numeric,
-  L          int default null
-) RETURNS    text
-AS
-$$
-DECLARE
-  H          text;
-  M          numeric;
-  R          numeric;
-BEGIN
-  R := D;
-
-  WHILE R > 0
-  LOOP
-    M := mod(R, 16);
-    H := concat(
-    CASE
-      WHEN M < 10
-      THEN chr(CAST(M + 48 AS INTEGER))
-      ELSE chr(CAST(M + 87 AS INTEGER))
-    END, H);
-    R := div(R, 16);
-  END LOOP;
-
-  IF H IS NULL THEN
-    H := '0';
-  END IF;
-
-  IF L IS NOT NULL AND length(H) < L THEN
-    RETURN lpad(H, L, '0');
-  END IF;
-
-  RETURN H;
-END
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-GRANT EXECUTE ON FUNCTION dec_to_hex(numeric, int) TO PUBLIC;
-
---------------------------------------------------------------------------------
--- URLEncode -------------------------------------------------------------------
---------------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION URLEncode (
-  url       text
-) RETURNS   text
-AS $$
-DECLARE
-  result    text;
-  c         text;
-  i         int;
-BEGIN
-  result := '';
-
-  FOR i IN 1..length(url)
-  LOOP
-    c := substr(url, i, 1);
-    IF regexp_match(c, '[A-Za-z0-9_~.-]') IS NOT NULL THEN
-      result := result || c;
-    ELSE
-      result := concat(result, '%', dec_to_hex(ascii(c), 2));
-    END IF;
-  END LOOP;
-
-  RETURN result;
-END
-$$ LANGUAGE plpgsql IMMUTABLE;
-
-GRANT EXECUTE ON FUNCTION URLEncode(text) TO PUBLIC;
