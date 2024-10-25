@@ -1,3 +1,3 @@
 # db-http
 
-База данных модуля [PGFeth](https://github.com/apostoldevel/module-PGFetch).
+Database for module [PGFetch](https://github.com/apostoldevel/module-PGFetch).
